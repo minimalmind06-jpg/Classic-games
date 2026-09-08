@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arkanoid - Retro</title>
+<style>
+  body {
+    background: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    font-family: 'Courier New', monospace;
+    color: #9bbc0f;
+  }
+
+  .phone-screen {
+    background: #8bac0f;
+    border: 12px solid #333;
+    border-radius: 10px;
+    padding: 10px;
+    box-shadow: 0 0 30px rgba(0,0,0,0.6);
+    touch-action: none;
+  }
+
+  #gameCanvas {
+    background: #9bbc0f;
+    display: block;
+    image-rendering: pixelated;
+  }
+
+  .hud {
+    display: flex;
+    justify-content: space-between;
+    width: 400px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #0f380f;
+    margin-bottom: 6px;
+    padding: 0 4px;
+  }
+
+  .info {
+    margin-top: 15px;
+    text-align: center;
+    font-size: 14px;
+    color: #9bbc0f;
+    max-width: 400px;
+  }
+</style>
+</head>
+<body>
+
+<div class="phone-screen">
+  <div class="hud">
+    <span>SCORE: <span id="score">0</span></span>
+    <span>NIVEL: <span id="level">1</span></span>
+    <span>VIDAS: <span id="lives">3</span></span>
+  </div>
+  <canvas id="gameCanvas" width="400" height="400"></canvas>
+</div>
+
+<div class="info">
+  Setas ← → para mover a raquete, ou arrasta o dedo/rato &bull; Espaço para começar/reiniciar
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const levelEl = document.getElementById('level');
+const livesEl = document.getElementById('lives');
+
+const paddleW = 70, paddleH = 10;
+const ballSize = 7;
+const brickRows = 5, brickCols = 8;
+const brickW = 44, brickH = 16, brickGap = 4;
+const brickOffsetTop = 40, brickOffsetLeft = (canvas.width - (brickCols * (brickW + brickGap) - brickGap)) / 2;
+
+let paddleX = canvas.width / 2 - paddleW / 2;
+let ballX = canvas.width / 2, ballY = canvas.height - 40;
+let ballVX = 3, ballVY = -3;
+let score = 0, level = 1, lives = 3;
+let bricks = [];
+let gameStarted = false;
+let gameOver = false;
+let won = false;
+
+function buildBricks(lvl) {
+  bricks = [];
+  const extraRows = Math.min(3, Math.floor(lvl / 3));
+  const rows = brickRows + extraRows;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < brickCols; c++) {
+      // em níveis mais altos, alguns tijolos aleatórios ficam em falta (padrão variado)
+      const skip = lvl > 2 && Math.random() < Math.min(0.25, lvl * 0.02) && r > 1;
+      bricks.push({ x: c, y: r, alive: !skip });
+    }
+  }
+}
+
+function resetBall() {
+  paddleX = canvas.width / 2 - paddleW / 2;
+  ballX = canvas.width / 2;
+  ballY = canvas.height - 40;
+  const speed = 3 + level * 0.3;
+  ballVX = speed * (Math.random() < 0.5 ? 1 : -1);
+  ballVY = -speed;
+}
+
+function startLevel(lvl) {
+  level = lvl;
+  levelEl.textContent = level;
+  buildBricks(lvl);
+  resetBall();
+}
+
+function update() {
+  if (!gameStarted || gameOver || won) return;
+
+  ballX += ballVX;
+  ballY += ballVY;
+
+  if (ballX <= 0 || ballX >= canvas.width - ballSize) ballVX *= -1;
+  if (ballY <= 0) ballVY *= -1;
+
+  // raquete
+  if (ballY + ballSize >= canvas.height - 20 && ballY + ballSize <= canvas.height - 20 + 12 &&
+      ballX + ballSize >= paddleX && ballX <= paddleX + paddleW && ballVY > 0) {
+    const hitPos = (ballX - paddleX) / paddleW - 0.5;
+    ballVX = hitPos * 7;
+    ballVY = -Math.abs(ballVY);
+  }
+
+  // queda
+  if (ballY > canvas.height) {
+    lives--;
+    livesEl.textContent = lives;
+    if (lives <= 0) {
+      gameOver = true;
+    } else {
+      resetBall();
+      gameStarted = false;
+    }
+  }
+
+  // colisão com tijolos
+  const bw = brickW, bh = brickH;
+  for (const b of bricks) {
+    if (!b.alive) continue;
+    const bx = brickOffsetLeft + b.x * (bw + brickGap);
+    const by = brickOffsetTop + b.y * (bh + brickGap);
+    if (ballX + ballSize >= bx && ballX <= bx + bw &&
+        ballY + ballSize >= by && ballY <= by + bh) {
+      b.alive = false;
+      ballVY *= -1;
+      score += 10;
+      scoreEl.textContent = score;
+      break;
+    }
+  }
+
+  if (bricks.every(b => !b.alive)) {
+    if (level >= 50) {
+      won = true;
+    } else {
+      startLevel(level + 1);
+      gameStarted = false;
+    }
+  }
+}
+
+function draw() {
+  ctx.fillStyle = '#9bbc0f';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // tijolos
+  ctx.fillStyle = '#0f380f';
+  for (const b of bricks) {
+    if (!b.alive) continue;
+    const bx = brickOffsetLeft + b.x * (brickW + brickGap);
+    const by = brickOffsetTop + b.y * (brickH + brickGap);
+    ctx.fillRect(bx, by, brickW, brickH);
+  }
+
+  // raquete
+  ctx.fillRect(paddleX, canvas.height - 20, paddleW, paddleH);
+
+  // bola
+  ctx.fillRect(ballX, ballY, ballSize, ballSize);
+
+  if (!gameStarted && !gameOver && !won) {
+    ctx.font = 'bold 16px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#0f380f';
+    ctx.fillText('Prime ESPAÇO para começar', canvas.width / 2, canvas.height / 2);
+  }
+
+  if (gameOver) {
+    ctx.fillStyle = 'rgba(155,188,15,0.9)';
+    ctx.fillRect(0, canvas.height / 2 - 40, canvas.width, 80);
+    ctx.fillStyle = '#0f380f';
+    ctx.font = 'bold 22px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 8);
+    ctx.font = 'bold 14px Courier New';
+    ctx.fillText('Espaço para reiniciar', canvas.width / 2, canvas.height / 2 + 20);
+  }
+
+  if (won) {
+    ctx.fillStyle = 'rgba(155,188,15,0.9)';
+    ctx.fillRect(0, canvas.height / 2 - 40, canvas.width, 80);
+    ctx.fillStyle = '#0f380f';
+    ctx.font = 'bold 20px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('COMPLETASTE OS 50 NIVEIS!', canvas.width / 2, canvas.height / 2 - 8);
+    ctx.font = 'bold 14px Courier New';
+    ctx.fillText('Espaço para reiniciar', canvas.width / 2, canvas.height / 2 + 20);
+  }
+}
+
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+function resetGame() {
+  score = 0;
+  lives = 3;
+  scoreEl.textContent = score;
+  livesEl.textContent = lives;
+  gameOver = false;
+  won = false;
+  gameStarted = false;
+  startLevel(1);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') {
+    paddleX = Math.max(0, paddleX - 25);
+    gameStarted = true;
+    e.preventDefault();
+  } else if (e.key === 'ArrowRight') {
+    paddleX = Math.min(canvas.width - paddleW, paddleX + 25);
+    gameStarted = true;
+    e.preventDefault();
+  } else if (e.key === ' ') {
+    if (gameOver || won) resetGame();
+    else gameStarted = true;
+    e.preventDefault();
+  }
+});
+
+function moveToClientX(clientX) {
+  const rect = canvas.getBoundingClientRect();
+  const scale = canvas.width / rect.width;
+  const x = (clientX - rect.left) * scale;
+  paddleX = Math.max(0, Math.min(canvas.width - paddleW, x - paddleW / 2));
+}
+
+canvas.addEventListener('mousemove', (e) => {
+  moveToClientX(e.clientX);
+  gameStarted = true;
+});
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  moveToClientX(e.touches[0].clientX);
+  gameStarted = true;
+}, { passive: false });
+canvas.addEventListener('touchstart', (e) => {
+  if (gameOver || won) resetGame();
+  moveToClientX(e.touches[0].clientX);
+  gameStarted = true;
+});
+canvas.addEventListener('click', () => {
+  if (gameOver || won) resetGame();
+  gameStarted = true;
+});
+
+startLevel(1);
+draw();
+requestAnimationFrame(gameLoop);
+</script>
+
+</body>
+</html>

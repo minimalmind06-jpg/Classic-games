@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pong - Retro</title>
+<style>
+  body {
+    background: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    font-family: 'Courier New', monospace;
+    color: #9bbc0f;
+  }
+
+  .phone-screen {
+    background: #8bac0f;
+    border: 12px solid #333;
+    border-radius: 10px;
+    padding: 10px;
+    box-shadow: 0 0 30px rgba(0,0,0,0.6);
+    touch-action: none;
+  }
+
+  #gameCanvas {
+    background: #9bbc0f;
+    display: block;
+    image-rendering: pixelated;
+  }
+
+  .hud {
+    display: flex;
+    justify-content: space-between;
+    width: 400px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #0f380f;
+    margin-bottom: 6px;
+    padding: 0 4px;
+  }
+
+  .info {
+    margin-top: 15px;
+    text-align: center;
+    font-size: 14px;
+    color: #9bbc0f;
+    max-width: 400px;
+  }
+</style>
+</head>
+<body>
+
+<div class="phone-screen">
+  <div class="hud">
+    <span>TU: <span id="scorePlayer">0</span></span>
+    <span>CPU: <span id="scoreCpu">0</span></span>
+  </div>
+  <canvas id="gameCanvas" width="400" height="300"></canvas>
+</div>
+
+<div class="info">
+  Setas ↑ ↓ para mover a raquete, ou arrasta o dedo/rato no ecrã &bull; Espaço para começar/reiniciar
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scorePlayerEl = document.getElementById('scorePlayer');
+const scoreCpuEl = document.getElementById('scoreCpu');
+
+const paddleW = 8, paddleH = 60;
+const ballSize = 8;
+
+let playerY = canvas.height / 2 - paddleH / 2;
+let cpuY = canvas.height / 2 - paddleH / 2;
+let ballX = canvas.width / 2, ballY = canvas.height / 2;
+let ballVX = 3.5, ballVY = 2.2;
+let scorePlayer = 0, scoreCpu = 0;
+let gameStarted = false;
+let gameOver = false;
+const WIN_SCORE = 7;
+
+function resetBall(direction) {
+  ballX = canvas.width / 2;
+  ballY = canvas.height / 2;
+  ballVX = 3.5 * direction;
+  ballVY = (Math.random() * 4 - 2);
+}
+
+function update() {
+  if (!gameStarted || gameOver) return;
+
+  // mover CPU (segue a bola com atraso simples)
+  const cpuCenter = cpuY + paddleH / 2;
+  if (cpuCenter < ballY - 10) cpuY += 3;
+  else if (cpuCenter > ballY + 10) cpuY -= 3;
+  cpuY = Math.max(0, Math.min(canvas.height - paddleH, cpuY));
+
+  ballX += ballVX;
+  ballY += ballVY;
+
+  if (ballY <= 0 || ballY >= canvas.height - ballSize) {
+    ballVY *= -1;
+  }
+
+  // colisão com raquete do jogador (esquerda)
+  if (ballX <= paddleW + 10 && ballX >= 10 &&
+      ballY + ballSize >= playerY && ballY <= playerY + paddleH) {
+    ballVX = Math.abs(ballVX) * 1.03;
+    const hitPos = (ballY - playerY) / paddleH - 0.5;
+    ballVY += hitPos * 3;
+  }
+
+  // colisão com raquete da CPU (direita)
+  if (ballX + ballSize >= canvas.width - paddleW - 10 && ballX <= canvas.width - 10 &&
+      ballY + ballSize >= cpuY && ballY <= cpuY + paddleH) {
+    ballVX = -Math.abs(ballVX) * 1.03;
+    const hitPos = (ballY - cpuY) / paddleH - 0.5;
+    ballVY += hitPos * 3;
+  }
+
+  // pontos
+  if (ballX < 0) {
+    scoreCpu++;
+    scoreCpuEl.textContent = scoreCpu;
+    checkWin();
+    resetBall(1);
+  } else if (ballX > canvas.width) {
+    scorePlayer++;
+    scorePlayerEl.textContent = scorePlayer;
+    checkWin();
+    resetBall(-1);
+  }
+}
+
+function checkWin() {
+  if (scorePlayer >= WIN_SCORE || scoreCpu >= WIN_SCORE) {
+    gameOver = true;
+  }
+}
+
+function draw() {
+  ctx.fillStyle = '#9bbc0f';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // linha central
+  ctx.strokeStyle = '#0f380f';
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath();
+  ctx.moveTo(canvas.width / 2, 0);
+  ctx.lineTo(canvas.width / 2, canvas.height);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = '#0f380f';
+  ctx.fillRect(10, playerY, paddleW, paddleH);
+  ctx.fillRect(canvas.width - paddleW - 10, cpuY, paddleW, paddleH);
+  ctx.fillRect(ballX, ballY, ballSize, ballSize);
+
+  if (!gameStarted) {
+    ctx.font = 'bold 18px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('Prime ESPAÇO para começar', canvas.width / 2, canvas.height / 2);
+  }
+
+  if (gameOver) {
+    ctx.font = 'bold 22px Courier New';
+    ctx.textAlign = 'center';
+    const msg = scorePlayer > scoreCpu ? 'GANHASTE!' : 'PERDESTE!';
+    ctx.fillText(msg, canvas.width / 2, canvas.height / 2 - 10);
+    ctx.font = 'bold 14px Courier New';
+    ctx.fillText('Espaço para reiniciar', canvas.width / 2, canvas.height / 2 + 18);
+  }
+}
+
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+function resetGame() {
+  scorePlayer = 0;
+  scoreCpu = 0;
+  scorePlayerEl.textContent = 0;
+  scoreCpuEl.textContent = 0;
+  playerY = canvas.height / 2 - paddleH / 2;
+  cpuY = canvas.height / 2 - paddleH / 2;
+  gameOver = false;
+  gameStarted = false;
+  resetBall(Math.random() < 0.5 ? 1 : -1);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowUp') {
+    playerY = Math.max(0, playerY - 25);
+    gameStarted = true;
+    e.preventDefault();
+  } else if (e.key === 'ArrowDown') {
+    playerY = Math.min(canvas.height - paddleH, playerY + 25);
+    gameStarted = true;
+    e.preventDefault();
+  } else if (e.key === ' ') {
+    if (gameOver) resetGame();
+    else gameStarted = true;
+    e.preventDefault();
+  }
+});
+
+function moveToClientY(clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const scale = canvas.height / rect.height;
+  const y = (clientY - rect.top) * scale;
+  playerY = Math.max(0, Math.min(canvas.height - paddleH, y - paddleH / 2));
+  gameStarted = true;
+}
+
+canvas.addEventListener('mousemove', (e) => moveToClientY(e.clientY));
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  moveToClientY(e.touches[0].clientY);
+}, { passive: false });
+canvas.addEventListener('touchstart', (e) => {
+  if (gameOver) resetGame();
+  moveToClientY(e.touches[0].clientY);
+});
+canvas.addEventListener('click', () => {
+  if (gameOver) resetGame();
+  gameStarted = true;
+});
+
+resetBall(1);
+draw();
+requestAnimationFrame(gameLoop);
+</script>
+
+</body>
+</html>

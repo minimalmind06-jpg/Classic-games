@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jogo do Galo - Retro</title>
+<style>
+  body {
+    background: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    font-family: 'Courier New', monospace;
+    color: #9bbc0f;
+  }
+
+  .phone-screen {
+    background: #8bac0f;
+    border: 12px solid #333;
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: 0 0 30px rgba(0,0,0,0.6);
+  }
+
+  .hud {
+    display: flex;
+    justify-content: space-between;
+    width: 300px;
+    font-size: 15px;
+    font-weight: bold;
+    color: #0f380f;
+    margin-bottom: 8px;
+    padding: 0 2px;
+  }
+
+  .status {
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+    color: #0f380f;
+    margin-bottom: 8px;
+    height: 20px;
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 90px);
+    grid-template-rows: repeat(3, 90px);
+    gap: 6px;
+    background: #0f380f;
+    padding: 6px;
+    border-radius: 4px;
+  }
+
+  .cell {
+    background: #9bbc0f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    font-weight: bold;
+    color: #0f380f;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .cell.win {
+    background: #0f380f;
+    color: #9bbc0f;
+  }
+
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  button {
+    background: #0f380f;
+    color: #9bbc0f;
+    border: none;
+    padding: 8px 14px;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    font-size: 13px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  button.active {
+    background: #9bbc0f;
+    color: #0f380f;
+    box-shadow: inset 0 0 0 2px #0f380f;
+  }
+
+  .info {
+    margin-top: 15px;
+    text-align: center;
+    font-size: 13px;
+    color: #9bbc0f;
+    max-width: 320px;
+  }
+</style>
+</head>
+<body>
+
+<div class="phone-screen">
+  <div class="hud">
+    <span>X: <span id="scoreX">0</span></span>
+    <span>EMPATES: <span id="scoreD">0</span></span>
+    <span>O: <span id="scoreO">0</span></span>
+  </div>
+  <div class="status" id="status">Vez de X</div>
+  <div class="board" id="board"></div>
+  <div class="controls">
+    <button id="mode2p" class="active">2 JOGADORES</button>
+    <button id="modeAI">VS COMPUTADOR</button>
+  </div>
+  <div class="controls">
+    <button id="resetBtn">REINICIAR</button>
+  </div>
+</div>
+
+<div class="info">
+  Toca numa célula para jogar. No modo "vs Computador" jogas sempre com X e o computador (O) nunca perde.
+</div>
+
+<script>
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const scoreXEl = document.getElementById('scoreX');
+const scoreOEl = document.getElementById('scoreO');
+const scoreDEl = document.getElementById('scoreD');
+const mode2pBtn = document.getElementById('mode2p');
+const modeAIBtn = document.getElementById('modeAI');
+const resetBtn = document.getElementById('resetBtn');
+
+let board = Array(9).fill(null);
+let currentPlayer = 'X';
+let gameActive = true;
+let vsComputer = false;
+
+let scores = JSON.parse(localStorage.getItem('galoScores') || '{"X":0,"O":0,"D":0}');
+scoreXEl.textContent = scores.X;
+scoreOEl.textContent = scores.O;
+scoreDEl.textContent = scores.D;
+
+const WIN_LINES = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+function buildBoard() {
+  boardEl.innerHTML = '';
+  for (let i = 0; i < 9; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.index = i;
+    cell.addEventListener('click', () => handleCellClick(i));
+    boardEl.appendChild(cell);
+  }
+}
+
+function render() {
+  const cells = boardEl.children;
+  for (let i = 0; i < 9; i++) {
+    cells[i].textContent = board[i] || '';
+  }
+}
+
+function checkWinner(b) {
+  for (const line of WIN_LINES) {
+    const [a, c, d] = line;
+    if (b[a] && b[a] === b[c] && b[a] === b[d]) {
+      return { winner: b[a], line };
+    }
+  }
+  if (b.every(cell => cell !== null)) return { winner: 'draw', line: null };
+  return null;
+}
+
+function handleCellClick(i) {
+  if (!gameActive || board[i]) return;
+  if (vsComputer && currentPlayer === 'O') return; // não deixar clicar enquanto o computador "pensa"
+
+  board[i] = currentPlayer;
+  render();
+
+  const result = checkWinner(board);
+  if (result) {
+    finishGame(result);
+    return;
+  }
+
+  currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+  statusEl.textContent = 'Vez de ' + currentPlayer;
+
+  if (vsComputer && currentPlayer === 'O' && gameActive) {
+    setTimeout(computerMove, 350);
+  }
+}
+
+function finishGame(result) {
+  gameActive = false;
+  if (result.winner === 'draw') {
+    statusEl.textContent = 'EMPATE!';
+    scores.D++;
+  } else {
+    statusEl.textContent = result.winner + ' VENCEU!';
+    scores[result.winner]++;
+    const cells = boardEl.children;
+    result.line.forEach(idx => cells[idx].classList.add('win'));
+  }
+  scoreXEl.textContent = scores.X;
+  scoreOEl.textContent = scores.O;
+  scoreDEl.textContent = scores.D;
+  localStorage.setItem('galoScores', JSON.stringify(scores));
+}
+
+// ---------- IA imbatível (minimax) ----------
+function computerMove() {
+  const best = minimax(board, 'O');
+  board[best.index] = 'O';
+  render();
+  const result = checkWinner(board);
+  if (result) {
+    finishGame(result);
+    return;
+  }
+  currentPlayer = 'X';
+  statusEl.textContent = 'Vez de X';
+}
+
+function minimax(b, player) {
+  const avail = b.map((v, i) => v === null ? i : null).filter(v => v !== null);
+  const res = checkWinner(b);
+  if (res) {
+    if (res.winner === 'O') return { score: 10 };
+    if (res.winner === 'X') return { score: -10 };
+    return { score: 0 };
+  }
+
+  const moves = [];
+  for (const i of avail) {
+    const newBoard = b.slice();
+    newBoard[i] = player;
+    const result = minimax(newBoard, player === 'O' ? 'X' : 'O');
+    moves.push({ index: i, score: result.score });
+  }
+
+  if (player === 'O') {
+    let best = moves[0];
+    for (const m of moves) if (m.score > best.score) best = m;
+    return best;
+  } else {
+    let best = moves[0];
+    for (const m of moves) if (m.score < best.score) best = m;
+    return best;
+  }
+}
+
+function resetGame() {
+  board = Array(9).fill(null);
+  currentPlayer = 'X';
+  gameActive = true;
+  statusEl.textContent = 'Vez de X';
+  render();
+}
+
+mode2pBtn.addEventListener('click', () => {
+  vsComputer = false;
+  mode2pBtn.classList.add('active');
+  modeAIBtn.classList.remove('active');
+  resetGame();
+});
+
+modeAIBtn.addEventListener('click', () => {
+  vsComputer = true;
+  modeAIBtn.classList.add('active');
+  mode2pBtn.classList.remove('active');
+  resetGame();
+});
+
+resetBtn.addEventListener('click', resetGame);
+
+buildBoard();
+render();
+</script>
+
+</body>
+</html>
